@@ -1,0 +1,44 @@
+import subprocess
+import os
+
+def exec_cmd(cmd):
+    try:
+        result = subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print(f"Command's output: {result.stdout.decode()}")
+    except subprocess.CalledProcessError as e:
+        print(f"error encountered: {e.stderr.decode()}")
+
+def run_sql(sql):
+    """Run SQL query using SQL*Plus."""
+    sql_cmd = f"echo \"{sql}\" | sqlplus -S / as sysdba"
+    exec_cmd(sql_cmd)
+
+def config_dg(primary, standby, listener, db_name):
+   '''Confgure DG'''
+    
+    # Enable Archivelog mode on Primary DB
+    print("enabling archivelog mode on primary DB")
+    run_sql(f"alter database archivelog;")
+    
+    # Enable forrced Logging on Primary DB
+    print("Enabling Forced Logging on primary DB")
+    run_sql(f"alter database force logging;")
+    
+    print(f"Configuring standby DB: {stby}")
+    # restore backup from primary DB
+    exec_cmd(f"rman target / recovery catalog rman@{pr} connect standby {stby}")
+  
+    print("Restore backup to Standby DB")
+    exec_cmd(f"rman target / cmdfile=rman_create_standby.sql")
+
+    run_sql(f"alter system set log_archive_dest_2='service={stby} target=standby' scope=both;")
+    
+    # Start redo apply on Standby DB
+    run_sql(f"alter database recover managed standby database using current logfile disconnect from session;")
+
+if __name__ == "__main__":
+    pr = "prmstr"
+    stby = "prmstr_stby"
+    db_name = "prmstr"
+    
+    config_dg(pr, stby, db_name)
